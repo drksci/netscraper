@@ -1,0 +1,58 @@
+{
+  "viewTitle": "TikTok video",
+  "models": {
+    "/video": "/video"
+  },
+  "fields": {
+    "/video": {
+      "browseUsername": "authorName",
+      "browserNickname": "byline",
+      "text": "desc",
+      "searchCommonLink": "hashtags",
+      "musicText": "musicName",
+      "likeCount": "diggCount",
+      "undefinedCount": "collectCount",
+      "videoCanvas": "frame"
+    }
+  },
+  "components": {
+    "video_card": "video_card",
+    "browse_username": "author_name",
+    "browser_nickname": "byline",
+    "text": "desc",
+    "search_common_link": "hashtag_list",
+    "search_common_link_item": "hashtag",
+    "music_text": "music",
+    "video_canvas": "frame",
+    "like_count": "digg_value",
+    "like_count_group": "digg_stat",
+    "like_count_label": "digg_label",
+    "comment_count": "comment_value",
+    "comment_count_group": "comment_stat",
+    "comment_count_label": "comment_label",
+    "undefined_count": "collect_value",
+    "undefined_count_group": "collect_stat",
+    "undefined_count_label": "collect_label",
+    "share_count": "share_value",
+    "share_count_group": "share_stat",
+    "share_count_label": "share_label"
+  },
+  "variants": {
+    "browse_username": "h3",
+    "text": "body",
+    "music_text": "caption"
+  },
+  "intents": {
+    "back": "Close the video (\u2715 at the top-left of the player) to return to the profile grid"
+  },
+  "notes": "undefined-count sits under the bookmark icon, i.e. collectCount; byline = nickname \u00b7 date; the clip duration is only rendered into the <canvas> frame, not the DOM \u2014 source it from __UNIVERSAL_DATA_FOR_REHYDRATION__ instead. The canvas frame animates (like a playing <video>), so it is dropped from the live surface: streaming it would keep the model from ever settling.",
+  "labels": {
+    "like_count_label": "Likes",
+    "comment_count_label": "Comments",
+    "undefined_count_label": "Saves",
+    "share_count_label": "Shares"
+  },
+  "drop": [
+    "video_canvas"
+  ]
+}

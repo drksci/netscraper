@@ -1,0 +1,1100 @@
+{
+  "a2flow": "0.2",
+  "id": "tiktok.explore",
+  "title": "TikTok Explore feed videos",
+  "description": "Scrolls tiktok.com/explore like a visitor and reads videos from the page's own /api/explore/item_list/ XHRs.",
+  "a2ui": {
+    "version": "v0.9",
+    "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
+    "theme": {
+      "primaryColor": "#FE2C55",
+      "agentDisplayName": "TikTok · a2flow"
+    }
+  },
+  "target": {
+    "baseUrl": "https://www.tiktok.com",
+    "viewport": {
+      "width": 1280,
+      "height": 900
+    },
+    "browser": {
+      "humanize": true,
+      "headless": true
+    }
+  },
+  "inputs": {
+    "type": "object",
+    "required": [
+      "maxItems"
+    ],
+    "properties": {
+      "maxItems": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 500,
+        "default": 100,
+        "description": "How many feed videos to collect"
+      }
+    }
+  },
+  "views": {
+    "captcha": {
+      "title": "Captcha",
+      "outcome": true,
+      "match": {
+        "selector": "#captcha-verify-container, [id*=\"captcha_container\"], iframe[src*=\"captcha\"]"
+      },
+      "components": [
+        {
+          "id": "root",
+          "component": "Text",
+          "text": "Captcha shown — run paused"
+        }
+      ],
+      "model": {},
+      "anchors": {},
+      "actions": {}
+    },
+    "blocked": {
+      "title": "Feed failed to load",
+      "outcome": true,
+      "match": {
+        "path": "^/explore/?$",
+        "text": "Something went wrong|Too many attempts|Try again later"
+      },
+      "components": [
+        {
+          "id": "root",
+          "component": "Text",
+          "text": "Feed blocked / failed to load"
+        }
+      ],
+      "model": {},
+      "anchors": {},
+      "actions": {}
+    },
+    "loginModal": {
+      "title": "Login prompt",
+      "interrupt": true,
+      "match": {
+        "selector": "#loginModalContentContainer"
+      },
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "login_title",
+            "dismiss"
+          ]
+        },
+        {
+          "id": "login_title",
+          "component": "Text",
+          "text": "Log in to TikTok (prompt)",
+          "variant": "h4"
+        },
+        {
+          "id": "dismiss",
+          "component": "Button",
+          "child": "dismiss_label",
+          "action": {
+            "event": {
+              "name": "dismiss"
+            }
+          }
+        },
+        {
+          "id": "dismiss_label",
+          "component": "Text",
+          "text": "Close"
+        }
+      ],
+      "model": {},
+      "anchors": {
+        "dismiss": {
+          "sel": "[data-e2e=\"modal-close-inner-button\"]"
+        }
+      },
+      "actions": {
+        "dismiss": {
+          "op": "click",
+          "anchor": "dismiss",
+          "intent": "Close the login prompt with its X button"
+        }
+      }
+    },
+    "explore": {
+      "title": "TikTok Explore",
+      "match": {
+        "path": "^/explore/?$",
+        "selector": "#explore-item-list"
+      },
+      "model": {
+        "/explore": {
+          "fields": {
+            "topRightContainer": {
+              "each": "div[class*=\"-DivTopRightContainer\"]",
+              "fields": {
+                "text": {
+                  "get": "text"
+                }
+              }
+            },
+            "categoryList": {
+              "each": "div[class*=\"-DivCategoryList\"]",
+              "fields": {
+                "text": {
+                  "get": "text"
+                }
+              }
+            },
+            "loginButtonContainer": {
+              "sel": "div[class*=\"-LoginButtonContainer\"]",
+              "get": "text"
+            },
+            "text": {
+              "each": "div.TUXButton-content",
+              "fields": {
+                "text": {
+                  "get": "text"
+                }
+              }
+            },
+            "text2": {
+              "each": "div.TUXButton-label",
+              "fields": {
+                "text": {
+                  "get": "text"
+                }
+              }
+            },
+            "exploreCategoryChip": {
+              "sel": "#category-list-container > div[class*=\"-DivCategoryList\"] > div[data-e2e=\"explore-category-chip\"] > div[data-testid=\"tux-web-interaction-container\"] > button > div[data-testid=\"tux-web-text\"]",
+              "get": "text"
+            }
+          }
+        },
+        "/videos": {
+          "net": {
+            "url": "/api/explore/item_list/",
+            "method": "GET",
+            "when": "$exists(itemList)",
+            "key": "id",
+            "mode": "append",
+            "select": "itemList.{\"id\": id, \"text\": desc, \"createTime\": createTime, \"authorMeta\": {\"id\": author.id, \"name\": author.uniqueId, \"nickName\": author.nickname, \"verified\": author.verified}, \"playCount\": stats.playCount, \"diggCount\": stats.diggCount, \"commentCount\": stats.commentCount, \"shareCount\": stats.shareCount, \"cover\": video.cover, \"webVideoUrl\": \"https://www.tiktok.com/@\" & author.uniqueId & \"/video/\" & id, \"hashtags\": [challenges.title]}"
+          }
+        },
+        "/tiles": {
+          "each": "#explore-item-list > div",
+          "fields": {
+            "url": {
+              "sel": "a[href*=\"/video/\"]",
+              "get": "attr:href",
+              "as": "url"
+            },
+            "id": {
+              "sel": "a[href*=\"/video/\"]",
+              "get": "attr:href",
+              "re": "(\\d{6,})"
+            },
+            "likes": {
+              "sel": "div[data-e2e=\"explore-card-like-container\"] > span",
+              "get": "text",
+              "as": "count"
+            },
+            "author": {
+              "sel": "p[data-e2e=\"explore-card-user-unique-id\"]",
+              "get": "text"
+            }
+          }
+        }
+      },
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "title",
+            "video_list",
+            "load_more"
+          ]
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "text": "Explore feed",
+          "variant": "h3"
+        },
+        {
+          "id": "video_list",
+          "component": "List",
+          "children": {
+            "path": "/videos",
+            "componentId": "video_card"
+          }
+        },
+        {
+          "id": "video_card",
+          "component": "Card",
+          "child": "video_row"
+        },
+        {
+          "id": "video_row",
+          "component": "Row",
+          "children": [
+            "video_cover",
+            "video_info"
+          ]
+        },
+        {
+          "id": "video_cover",
+          "component": "Image",
+          "url": {
+            "path": "cover"
+          },
+          "fit": "cover"
+        },
+        {
+          "id": "video_info",
+          "component": "Column",
+          "children": [
+            "video_text",
+            "video_author",
+            "video_plays"
+          ]
+        },
+        {
+          "id": "video_text",
+          "component": "Text",
+          "text": {
+            "path": "text"
+          }
+        },
+        {
+          "id": "video_author",
+          "component": "Text",
+          "text": {
+            "path": "authorMeta/name"
+          },
+          "variant": "caption"
+        },
+        {
+          "id": "video_plays",
+          "component": "Text",
+          "text": {
+            "call": "formatNumber",
+            "args": {
+              "value": {
+                "path": "playCount"
+              }
+            },
+            "returnType": "string"
+          },
+          "variant": "caption"
+        },
+        {
+          "id": "load_more",
+          "component": "Button",
+          "child": "load_more_label",
+          "action": {
+            "event": {
+              "name": "loadMore"
+            }
+          }
+        },
+        {
+          "id": "load_more_label",
+          "component": "Text",
+          "text": "Load more"
+        }
+      ],
+      "anchors": {
+        "video_list": {
+          "model": "/tiles"
+        },
+        "load_more": {
+          "model": "/tiles"
+        }
+      },
+      "actions": {
+        "loadMore": {
+          "op": "scroll",
+          "by": "page",
+          "intent": "Scroll the explore grid down so more videos load"
+        }
+      },
+      "settle": {
+        "quietMs": 300,
+        "timeoutMs": 30000
+      },
+      "fingerprint": {
+        "simhash": "8901c617",
+        "shape": [
+          "0:html",
+          "1:head",
+          "1:body",
+          "2:meta",
+          "2:link",
+          "2:svg",
+          "2:div",
+          "3:link",
+          "3:section",
+          "3:div",
+          "4:div",
+          "5:button",
+          "5:div",
+          "6:a",
+          "7:svg",
+          "7:strong",
+          "5:div",
+          "6:div",
+          "7:form",
+          "8:input",
+          "8:span",
+          "8:button",
+          "9:div",
+          "10:svg",
+          "8:div",
+          "5:div",
+          "6:button",
+          "6:i",
+          "7:svg",
+          "3:div",
+          "4:div",
+          "5:div",
+          "6:div",
+          "6:div",
+          "7:div",
+          "8:a",
+          "9:svg",
+          "9:strong",
+          "8:div",
+          "9:svg",
+          "7:div",
+          "8:button",
+          "9:div",
+          "10:div",
+          "11:div",
+          "12:svg",
+          "10:div",
+          "6:div",
+          "7:div",
+          "8:h2",
+          "9:div",
+          "10:a",
+          "11:button",
+          "12:div",
+          "13:div",
+          "14:div",
+          "15:svg",
+          "15:div",
+          "13:div",
+          "8:h2",
+          "9:div",
+          "10:a",
+          "11:button",
+          "12:div",
+          "13:div",
+          "14:div",
+          "15:div",
+          "16:svg",
+          "15:div",
+          "13:div",
+          "8:h2",
+          "9:div",
+          "10:a",
+          "11:button",
+          "12:div",
+          "13:div",
+          "14:div",
+          "15:div",
+          "16:svg",
+          "16:div",
+          "15:div",
+          "13:div",
+          "8:h2",
+          "9:div",
+          "10:div",
+          "11:a",
+          "12:button",
+          "13:div",
+          "14:div",
+          "15:div",
+          "16:svg",
+          "14:div",
+          "8:div",
+          "9:div",
+          "10:a",
+          "11:button",
+          "12:div",
+          "13:div",
+          "14:div",
+          "15:svg",
+          "15:div",
+          "13:div",
+          "8:h2",
+          "9:div",
+          "10:a",
+          "11:button",
+          "12:div",
+          "13:div",
+          "14:div",
+          "15:svg",
+          "15:div",
+          "13:div",
+          "8:div",
+          "9:button",
+          "10:div",
+          "11:div",
+          "12:div",
+          "13:div",
+          "14:svg",
+          "14:div",
+          "13:div",
+          "11:div",
+          "7:div",
+          "8:div",
+          "9:button",
+          "10:div",
+          "11:div",
+          "7:div",
+          "8:div",
+          "9:h3",
+          "9:span",
+          "4:div",
+          "5:div",
+          "6:div",
+          "7:div",
+          "8:div",
+          "9:div",
+          "10:div",
+          "11:svg",
+          "8:div",
+          "9:div",
+          "10:div",
+          "11:button",
+          "12:div",
+          "8:div",
+          "6:div",
+          "7:div",
+          "8:div",
+          "9:div",
+          "10:div",
+          "11:div",
+          "12:div",
+          "13:a",
+          "14:canvas",
+          "14:div",
+          "15:div",
+          "16:div",
+          "17:span",
+          "18:picture",
+          "19:img",
+          "16:div",
+          "17:div",
+          "18:div",
+          "19:video",
+          "17:svg",
+          "15:div",
+          "16:div",
+          "17:div",
+          "18:svg",
+          "18:span",
+          "15:div",
+          "16:svg",
+          "10:div",
+          "11:div",
+          "12:div",
+          "13:div",
+          "14:a",
+          "15:span",
+          "16:img",
+          "14:a",
+          "15:p",
+          "14:svg",
+          "13:div",
+          "8:div",
+          "9:div",
+          "10:div",
+          "11:div",
+          "12:div",
+          "13:a",
+          "14:canvas",
+          "14:div",
+          "15:div",
+          "16:div",
+          "17:span",
+          "18:picture",
+          "19:img",
+          "15:div",
+          "16:div",
+          "17:div",
+          "18:svg",
+          "18:span",
+          "15:div",
+          "16:svg",
+          "10:div",
+          "11:div",
+          "12:div",
+          "13:div",
+          "14:a",
+          "15:span",
+          "16:img",
+          "14:a",
+          "15:p",
+          "13:div",
+          "8:div",
+          "9:div",
+          "10:div",
+          "11:div",
+          "12:div",
+          "13:a",
+          "14:canvas",
+          "14:div",
+          "15:div",
+          "16:div",
+          "17:span",
+          "18:picture",
+          "19:img",
+          "15:div",
+          "16:div",
+          "17:div",
+          "18:svg",
+          "18:span",
+          "15:div",
+          "16:svg",
+          "10:div",
+          "11:div",
+          "12:div",
+          "13:div",
+          "14:a",
+          "15:span",
+          "16:img",
+          "14:a",
+          "15:p",
+          "14:svg",
+          "13:div",
+          "8:div",
+          "9:div",
+          "10:div",
+          "11:div",
+          "12:div",
+          "13:a",
+          "14:canvas",
+          "14:div",
+          "15:div",
+          "16:div",
+          "17:span",
+          "18:picture",
+          "19:img",
+          "15:div",
+          "16:div",
+          "17:div",
+          "18:svg",
+          "18:span",
+          "15:div",
+          "16:svg",
+          "10:div",
+          "11:div",
+          "12:div",
+          "13:div",
+          "14:a",
+          "15:span",
+          "16:img",
+          "14:a",
+          "15:p",
+          "13:div",
+          "8:div",
+          "9:div",
+          "4:div",
+          "5:div",
+          "6:button",
+          "7:div",
+          "8:div",
+          "4:div",
+          "5:div",
+          "6:div",
+          "7:div",
+          "8:div",
+          "9:button",
+          "10:div",
+          "11:svg",
+          "7:div",
+          "7:div",
+          "8:button",
+          "9:div",
+          "10:div",
+          "4:div",
+          "3:div",
+          "2:div",
+          "3:div",
+          "3:div",
+          "4:div",
+          "2:div",
+          "2:tiktok-cookie-banner",
+          "2:div",
+          "3:div"
+        ],
+        "ax": [
+          "0:RootWebArea",
+          "1:image",
+          "1:region",
+          "1:link",
+          "2:image",
+          "2:strong",
+          "1:button",
+          "2:image",
+          "1:searchbox",
+          "2:image",
+          "1:heading",
+          "2:link",
+          "3:listitem",
+          "4:image",
+          "1:link",
+          "2:listitem",
+          "3:image",
+          "1:heading",
+          "2:link",
+          "3:listitem",
+          "4:image",
+          "1:listitem",
+          "2:image",
+          "1:button",
+          "1:heading",
+          "1:image",
+          "1:button",
+          "1:button",
+          "2:link",
+          "3:image",
+          "3:Video",
+          "3:image",
+          "3:image",
+          "1:link",
+          "1:link",
+          "2:paragraph",
+          "1:image",
+          "1:button",
+          "2:link",
+          "3:image",
+          "1:link",
+          "1:link",
+          "2:paragraph",
+          "1:button",
+          "2:link",
+          "3:image",
+          "1:link",
+          "1:link",
+          "2:paragraph",
+          "1:image",
+          "1:button",
+          "2:link",
+          "3:image",
+          "1:link",
+          "1:link",
+          "2:paragraph",
+          "1:button",
+          "2:image",
+          "1:button"
+        ],
+        "minSimilarity": 0.85
+      }
+    }
+  },
+  "routes": {
+    "tiktok.video": {
+      "description": "One record per Explore feed video (from the page's item_list XHRs), capped at maxItems.",
+      "key": "id",
+      "from": {
+        "view": "explore",
+        "on": "item",
+        "each": "videos[[0..($surfaces.control.run.maxItems - 1)]]"
+      },
+      "extract": "$item",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "createTime": {
+            "type": "number"
+          },
+          "authorMeta": {
+            "type": "object"
+          },
+          "playCount": {
+            "type": "number"
+          },
+          "diggCount": {
+            "type": "number"
+          },
+          "commentCount": {
+            "type": "number"
+          },
+          "shareCount": {
+            "type": "number"
+          },
+          "cover": {
+            "type": "string"
+          },
+          "webVideoUrl": {
+            "type": "string"
+          },
+          "hashtags": {
+            "type": "array"
+          }
+        }
+      }
+    }
+  },
+  "control": {
+    "dataModel": {
+      "inputs": {
+        "maxItems": 100
+      }
+    },
+    "components": [
+      {
+        "id": "root",
+        "component": "Column",
+        "children": [
+          "form_title",
+          "max_slider",
+          "start_button"
+        ]
+      },
+      {
+        "id": "form_title",
+        "component": "Text",
+        "text": "TikTok Explore feed",
+        "variant": "h3"
+      },
+      {
+        "id": "max_slider",
+        "component": "Slider",
+        "label": "Videos to collect",
+        "min": 10,
+        "max": 500,
+        "value": {
+          "path": "/inputs/maxItems"
+        }
+      },
+      {
+        "id": "start_button",
+        "component": "Button",
+        "child": "start_label",
+        "action": {
+          "event": {
+            "name": "start",
+            "context": {
+              "maxItems": {
+                "path": "/inputs/maxItems"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "start_label",
+        "component": "Text",
+        "text": "Start"
+      }
+    ]
+  },
+  "policies": {
+    "timeouts": {
+      "navigate": 45000,
+      "await": 25000,
+      "action": 20000,
+      "input": 10000
+    },
+    "retry": {
+      "attempts": 3,
+      "baseMs": 800,
+      "maxMs": 8000,
+      "jitter": 0.3
+    },
+    "rateLimit": {
+      "minDelayMs": 400,
+      "jitterMs": 600
+    },
+    "dismiss": [
+      {
+        "sel": "[data-e2e=\"modal-close-inner-button\"]",
+        "intent": "Close the login prompt"
+      }
+    ],
+    "blocked": {
+      "selectors": [
+        "#captcha-verify-container",
+        "[id*=\"captcha_container\"]",
+        "iframe[src*=\"captcha\"]"
+      ],
+      "textPatterns": [
+        "verify to continue",
+        "drag the slider"
+      ],
+      "action": "fail"
+    },
+    "http": {
+      "retry": [
+        408,
+        425,
+        429,
+        500,
+        502,
+        503,
+        504
+      ],
+      "fatal": [
+        401,
+        403,
+        404,
+        410
+      ]
+    }
+  },
+  "machine": {
+    "id": "tiktok.explore",
+    "initial": "idle",
+    "context": {
+      "maxItems": 100,
+      "stall": 0
+    },
+    "on": {
+      "INTERRUPT": {
+        "target": ".interrupted"
+      }
+    },
+    "states": {
+      "interrupted": {
+        "entry": [
+          {
+            "type": "log",
+            "params": {
+              "text": "interrupt: {{ event.view }}"
+            }
+          }
+        ],
+        "invoke": {
+          "src": "a2ui.act",
+          "input": {
+            "on": "dismiss"
+          },
+          "onDone": {
+            "target": "resume"
+          },
+          "onError": {
+            "target": "resume"
+          }
+        }
+      },
+      "resume": {
+        "type": "history",
+        "history": "deep"
+      },
+      "idle": {
+        "on": {
+          "start": {
+            "target": "open",
+            "actions": [
+              {
+                "type": "ctx.set",
+                "params": {
+                  "maxItems": "{{ event.context.maxItems | int }}"
+                }
+              },
+              {
+                "type": "a2ui.write",
+                "params": {
+                  "path": "/run",
+                  "value": {
+                    "maxItems": "{{ event.context.maxItems | int }}"
+                  }
+                }
+              },
+              {
+                "type": "work.start",
+                "params": {
+                  "type": "feed",
+                  "key": "explore"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "open": {
+        "invoke": {
+          "src": "browser.navigate",
+          "input": {
+            "url": "/explore"
+          },
+          "onDone": "awaitFeed",
+          "onError": "failed"
+        }
+      },
+      "awaitFeed": {
+        "invoke": {
+          "src": "view.await",
+          "input": {
+            "views": [
+              "explore",
+              "captcha",
+              "blocked"
+            ]
+          },
+          "onError": "failed",
+          "onDone": [
+            {
+              "guard": {
+                "type": "cond",
+                "params": {
+                  "eq": [
+                    "{{ event.output.view }}",
+                    "captcha"
+                  ]
+                }
+              },
+              "target": "failed",
+              "actions": [
+                {
+                  "type": "log",
+                  "params": {
+                    "text": "captcha shown — not solving; stopping"
+                  }
+                }
+              ]
+            },
+            {
+              "guard": {
+                "type": "cond",
+                "params": {
+                  "eq": [
+                    "{{ event.output.view }}",
+                    "blocked"
+                  ]
+                }
+              },
+              "target": "failed",
+              "actions": [
+                {
+                  "type": "log",
+                  "params": {
+                    "text": "feed blocked"
+                  }
+                }
+              ]
+            },
+            {
+              "target": "loadFeed"
+            }
+          ]
+        }
+      },
+      "loadFeed": {
+        "always": [
+          {
+            "guard": {
+              "type": "cond",
+              "params": {
+                "or": [
+                  {
+                    "gte": [
+                      {
+                        "count": "/videos"
+                      },
+                      "{{ maxItems }}"
+                    ]
+                  },
+                  {
+                    "stalled": 3
+                  }
+                ]
+              }
+            },
+            "target": "emit"
+          },
+          {
+            "target": "loadingMore"
+          }
+        ]
+      },
+      "loadingMore": {
+        "invoke": {
+          "src": "a2ui.act",
+          "input": {
+            "on": "load_more",
+            "action": "loadMore"
+          },
+          "onError": {
+            "target": "emit",
+            "actions": [
+              {
+                "type": "log",
+                "params": {
+                  "text": "loadMore gave up; emitting what we have"
+                }
+              }
+            ]
+          },
+          "onDone": {
+            "target": "loadFeed",
+            "actions": [
+              {
+                "type": "ctx.stall",
+                "params": {
+                  "count": {
+                    "$count": "/videos"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "emit": {
+        "entry": [
+          {
+            "type": "route.emit",
+            "params": {
+              "route": "tiktok.video"
+            }
+          },
+          {
+            "type": "work.complete",
+            "params": {
+              "type": "feed",
+              "key": "explore"
+            }
+          }
+        ],
+        "always": {
+          "target": "done"
+        }
+      },
+      "failed": {
+        "entry": [
+          {
+            "type": "work.fail",
+            "params": {
+              "type": "feed",
+              "key": "explore",
+              "error": "{{ event.error.message }}"
+            }
+          }
+        ],
+        "always": {
+          "target": "done"
+        }
+      },
+      "done": {
+        "type": "final"
+      }
+    }
+  }
+}

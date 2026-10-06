@@ -1,0 +1,2593 @@
+{
+  "$schema": "../schema/a2flow.schema.json",
+  "a2flow": "0.2",
+  "id": "tiktok.profile",
+  "title": "TikTok profile scraper (Apify clockworks/tiktok-scraper · profiles flow)",
+  "description": "User input arrives as an A2UI form (control surface); an XState machine then, per profile, emits the author, dispatches A2UI loadMore until resultsPerPage tiles are projected, and opens/emits/closes each video — every page interaction is an A2UI action on the projected surface.",
+  "a2ui": {
+    "version": "v0.9",
+    "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
+    "theme": {
+      "primaryColor": "#FE2C55",
+      "agentDisplayName": "TikTok · a2flow"
+    }
+  },
+  "target": {
+    "baseUrl": "https://www.tiktok.com",
+    "viewport": {
+      "width": 1280,
+      "height": 900
+    },
+    "browser": {
+      "humanize": true,
+      "headless": true
+    }
+  },
+  "inputs": {
+    "type": "object",
+    "required": [
+      "profiles"
+    ],
+    "properties": {
+      "profiles": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "minItems": 1,
+        "description": "Usernames, with or without @"
+      },
+      "resultsPerPage": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 200,
+        "default": 10
+      }
+    }
+  },
+  "routes": {
+    "tiktok.author": {
+      "description": "One profile (Apify authorMeta shape). Read from the A2UI stream: final state of each profile surface.",
+      "key": "name",
+      "from": {
+        "view": "profile",
+        "on": "close"
+      },
+      "extract": "author.{ \"name\": uniqueId, \"nickName\": nickname, \"signature\": signature, \"avatar\": avatar,\n        \"fans\": fans, \"following\": following, \"heart\": heart, \"profileUrl\": $model.page.url }",
+      "schema": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "nickName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "signature": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "avatar": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fans": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "following": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "heart": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "profileUrl": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "tiktok.video": {
+      "description": "FAST: one record per item of the profile's network-sourced /feed (the page's own item_list XHRs), capped at the run's resultsPerPage.",
+      "key": "id",
+      "from": {
+        "view": "profile",
+        "on": "item",
+        "each": "feed[[0..($surfaces.control.run.resultsPerPage - 1)]]"
+      },
+      "extract": "(\n        $a := author;\n        {\n          \"id\": $item.id, \"text\": $item.desc, \"webVideoUrl\": page.url & \"/video/\" & $item.id,\n          \"playCount\": $item.stats.playCount, \"diggCount\": $item.stats.diggCount, \"commentCount\": $item.stats.commentCount,\n          \"shareCount\": $item.stats.shareCount, \"collectCount\": $item.stats.collectCount,\n          \"createTime\": $item.createTime, \"createTimeISO\": $fromMillis($item.createTime * 1000),\n          \"hashtags\": [$item.hashtags.{ \"name\": $ }],\n          \"authorMeta\": { \"name\": $a.uniqueId, \"nickName\": $a.nickname, \"fans\": $a.fans },\n          \"musicMeta\": { \"musicName\": $item.music },\n          \"videoMeta\": { \"coverUrl\": $item.cover, \"duration\": $item.duration }\n        }\n      )",
+      "schema": {
+        "type": "object",
+        "required": [
+          "id",
+          "webVideoUrl"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "webVideoUrl": {
+            "type": "string"
+          },
+          "playCount": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "diggCount": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "commentCount": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "shareCount": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "collectCount": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "createTime": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "createTimeISO": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hashtags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "authorMeta": {
+            "type": "object"
+          },
+          "musicMeta": {
+            "type": "object"
+          },
+          "videoMeta": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "tiktok.video.detail": {
+      "dataset": "tiktok.video",
+      "description": "FALLBACK (feed unavailable): final state of each opened video surface, joined to its grid tile on the last profile surface.",
+      "key": "id",
+      "from": {
+        "view": "video",
+        "on": "close"
+      },
+      "extract": "(\n        $v := video;\n        $tile := $surfaces.profile.videos[id = $v.id];\n        $a := $surfaces.profile.author;\n        {\n          \"id\": $v.id, \"text\": $v.desc, \"webVideoUrl\": $v.url, \"playCount\": $tile.playCount,\n          \"diggCount\": $v.diggCount, \"commentCount\": $v.commentCount, \"shareCount\": $v.shareCount, \"collectCount\": $v.collectCount,\n          \"createTimeText\": $v.createTimeText,\n          \"hashtags\": [$v.hashtags],\n          \"authorMeta\": { \"name\": $a.uniqueId, \"nickName\": $v.nickname ? $v.nickname : $a.nickname, \"fans\": $a.fans },\n          \"musicMeta\": { \"musicName\": $v.musicName },\n          \"videoMeta\": { \"coverUrl\": $tile.cover, \"duration\": $v.duration ? $v.duration : $v.durationText }\n        }\n      )",
+      "schema": {
+        "type": "object",
+        "required": [
+          "id",
+          "webVideoUrl"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "webVideoUrl": {
+            "type": "string"
+          },
+          "playCount": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "diggCount": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "commentCount": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "shareCount": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "collectCount": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "createTimeText": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hashtags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "authorMeta": {
+            "type": "object"
+          },
+          "musicMeta": {
+            "type": "object"
+          },
+          "videoMeta": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  },
+  "views": {
+    "loginModal": {
+      "title": "Login prompt",
+      "interrupt": true,
+      "match": {
+        "selector": "[data-e2e=\"modal-mask\"][style*=\"flex\"]"
+      },
+      "components": [
+        {
+          "id": "root",
+          "component": "Card",
+          "child": "modal_col"
+        },
+        {
+          "id": "modal_col",
+          "component": "Column",
+          "children": [
+            "modal_title",
+            "dismiss"
+          ]
+        },
+        {
+          "id": "modal_title",
+          "component": "Text",
+          "text": {
+            "path": "/modal/title"
+          },
+          "variant": "h4"
+        },
+        {
+          "id": "dismiss",
+          "component": "Button",
+          "child": "dismiss_label",
+          "action": {
+            "event": {
+              "name": "dismiss"
+            }
+          }
+        },
+        {
+          "id": "dismiss_label",
+          "component": "Text",
+          "text": "Close"
+        }
+      ],
+      "model": {
+        "/modal": {
+          "fields": {
+            "title": {
+              "sel": "[data-e2e=\"modal-mask\"] p, [role=\"dialog\"] h2",
+              "get": "text",
+              "default": "Log in"
+            }
+          }
+        }
+      },
+      "anchors": {
+        "modal_title": {
+          "model": "/modal/title"
+        },
+        "dismiss": {
+          "sel": "[data-e2e=\"modal-close-inner-button\"]"
+        }
+      },
+      "actions": {
+        "dismiss": {
+          "op": "click",
+          "anchor": "dismiss",
+          "intent": "Close the login prompt"
+        }
+      },
+      "settle": {
+        "quietMs": 150,
+        "timeoutMs": 4000
+      }
+    },
+    "notFound": {
+      "title": "Account not found",
+      "outcome": true,
+      "match": {
+        "path": "^/@[^/]+/?$",
+        "text": "couldn.?t find this account"
+      },
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "outcome_message",
+            "back"
+          ]
+        },
+        {
+          "id": "outcome_message",
+          "component": "Text",
+          "text": {
+            "path": "/outcome/message"
+          },
+          "variant": "h4"
+        },
+        {
+          "id": "back",
+          "component": "Button",
+          "child": "back_label",
+          "action": {
+            "event": {
+              "name": "back"
+            }
+          }
+        },
+        {
+          "id": "back_label",
+          "component": "Text",
+          "text": "Back"
+        }
+      ],
+      "model": {
+        "/outcome": {
+          "fields": {
+            "message": {
+              "sel": "main",
+              "get": "text"
+            }
+          }
+        }
+      },
+      "anchors": {
+        "outcome_message": {
+          "model": "/outcome/message"
+        }
+      },
+      "actions": {
+        "back": {
+          "op": "back",
+          "intent": "Go back to the previous page"
+        }
+      },
+      "settle": {
+        "quietMs": 250,
+        "timeoutMs": 20000
+      }
+    },
+    "privateAccount": {
+      "title": "Private account",
+      "outcome": true,
+      "match": {
+        "path": "^/@[^/]+/?$",
+        "text": "this account is private"
+      },
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "outcome_message",
+            "back"
+          ]
+        },
+        {
+          "id": "outcome_message",
+          "component": "Text",
+          "text": {
+            "path": "/outcome/message"
+          },
+          "variant": "h4"
+        },
+        {
+          "id": "back",
+          "component": "Button",
+          "child": "back_label",
+          "action": {
+            "event": {
+              "name": "back"
+            }
+          }
+        },
+        {
+          "id": "back_label",
+          "component": "Text",
+          "text": "Back"
+        }
+      ],
+      "model": {
+        "/outcome": {
+          "fields": {
+            "message": {
+              "sel": "main",
+              "get": "text"
+            }
+          }
+        }
+      },
+      "anchors": {
+        "outcome_message": {
+          "model": "/outcome/message"
+        }
+      },
+      "actions": {
+        "back": {
+          "op": "back",
+          "intent": "Go back to the previous page"
+        }
+      },
+      "settle": {
+        "quietMs": 250,
+        "timeoutMs": 20000
+      }
+    },
+    "videoUnavailable": {
+      "title": "Video unavailable",
+      "outcome": true,
+      "match": {
+        "path": "^/@[^/]+/video/\\d+/?$",
+        "text": "video (is )?(currently )?unavailable"
+      },
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "outcome_message",
+            "back"
+          ]
+        },
+        {
+          "id": "outcome_message",
+          "component": "Text",
+          "text": {
+            "path": "/outcome/message"
+          },
+          "variant": "h4"
+        },
+        {
+          "id": "back",
+          "component": "Button",
+          "child": "back_label",
+          "action": {
+            "event": {
+              "name": "back"
+            }
+          }
+        },
+        {
+          "id": "back_label",
+          "component": "Text",
+          "text": "Back"
+        }
+      ],
+      "model": {
+        "/outcome": {
+          "fields": {
+            "message": {
+              "sel": "main",
+              "get": "text"
+            }
+          }
+        }
+      },
+      "anchors": {
+        "outcome_message": {
+          "model": "/outcome/message"
+        }
+      },
+      "actions": {
+        "back": {
+          "op": "back",
+          "intent": "Go back to the previous page"
+        }
+      },
+      "settle": {
+        "quietMs": 250,
+        "timeoutMs": 20000
+      }
+    },
+    "profile": {
+      "title": "TikTok profile",
+      "match": {
+        "path": "^/@[^/]+/?$",
+        "selector": "h1[data-e2e=\"user-title\"]"
+      },
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "back",
+            "author_card",
+            "videos_section"
+          ]
+        },
+        {
+          "id": "author_nickname",
+          "component": "Text",
+          "text": {
+            "path": "/author/nickname"
+          },
+          "variant": "h2"
+        },
+        {
+          "id": "author_avatar",
+          "component": "Image",
+          "url": {
+            "path": "/author/avatar"
+          },
+          "variant": "avatar",
+          "fit": "cover"
+        },
+        {
+          "id": "author_handle",
+          "component": "Text",
+          "text": {
+            "path": "/author/uniqueId"
+          },
+          "variant": "h4"
+        },
+        {
+          "id": "following_stat",
+          "component": "Column",
+          "align": "center",
+          "children": [
+            "following_value",
+            "following_label"
+          ]
+        },
+        {
+          "id": "following_value",
+          "component": "Text",
+          "text": {
+            "call": "formatNumber",
+            "args": {
+              "value": {
+                "path": "/author/following"
+              }
+            },
+            "returnType": "string"
+          },
+          "variant": "h4"
+        },
+        {
+          "id": "following_label",
+          "component": "Text",
+          "text": "Following",
+          "variant": "caption"
+        },
+        {
+          "id": "fans_stat",
+          "component": "Column",
+          "align": "center",
+          "children": [
+            "fans_value",
+            "fans_label"
+          ]
+        },
+        {
+          "id": "fans_value",
+          "component": "Text",
+          "text": {
+            "call": "formatNumber",
+            "args": {
+              "value": {
+                "path": "/author/fans"
+              }
+            },
+            "returnType": "string"
+          },
+          "variant": "h4"
+        },
+        {
+          "id": "fans_label",
+          "component": "Text",
+          "text": "Followers",
+          "variant": "caption"
+        },
+        {
+          "id": "heart_stat",
+          "component": "Column",
+          "align": "center",
+          "children": [
+            "heart_value",
+            "heart_label"
+          ]
+        },
+        {
+          "id": "heart_value",
+          "component": "Text",
+          "text": {
+            "call": "formatNumber",
+            "args": {
+              "value": {
+                "path": "/author/heart"
+              }
+            },
+            "returnType": "string"
+          },
+          "variant": "h4"
+        },
+        {
+          "id": "heart_label",
+          "component": "Text",
+          "text": "Likes",
+          "variant": "caption"
+        },
+        {
+          "id": "author_bio",
+          "component": "Text",
+          "text": {
+            "path": "/author/signature"
+          },
+          "variant": "body"
+        },
+        {
+          "id": "header_row",
+          "component": "Row",
+          "align": "center",
+          "children": [
+            "author_nickname",
+            "author_avatar",
+            "author_handle"
+          ]
+        },
+        {
+          "id": "stats_row",
+          "component": "Row",
+          "justify": "spaceEvenly",
+          "children": [
+            "following_stat",
+            "fans_stat",
+            "heart_stat"
+          ]
+        },
+        {
+          "id": "author_details",
+          "component": "Column",
+          "children": [
+            "header_row",
+            "stats_row",
+            "author_bio"
+          ]
+        },
+        {
+          "id": "author_card",
+          "component": "Card",
+          "child": "author_details"
+        },
+        {
+          "id": "video_cover",
+          "component": "Image",
+          "url": {
+            "path": "cover"
+          },
+          "variant": "mediumFeature",
+          "fit": "cover"
+        },
+        {
+          "id": "video_plays",
+          "component": "Text",
+          "text": {
+            "call": "formatNumber",
+            "args": {
+              "value": {
+                "path": "playCount"
+              }
+            },
+            "returnType": "string"
+          },
+          "variant": "caption"
+        },
+        {
+          "id": "video_grid",
+          "component": "List",
+          "direction": "vertical",
+          "children": {
+            "path": "/videos",
+            "componentId": "video_tile"
+          }
+        },
+        {
+          "id": "video_tile",
+          "component": "Button",
+          "variant": "borderless",
+          "child": "video_card",
+          "action": {
+            "event": {
+              "name": "openVideo",
+              "context": {
+                "id": {
+                  "path": "id"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "video_card",
+          "component": "Card",
+          "child": "video_card_body"
+        },
+        {
+          "id": "video_card_body",
+          "component": "Column",
+          "children": [
+            "video_cover",
+            "video_plays"
+          ]
+        },
+        {
+          "id": "load_more",
+          "component": "Button",
+          "child": "load_more_label",
+          "action": {
+            "event": {
+              "name": "loadMore"
+            }
+          }
+        },
+        {
+          "id": "load_more_label",
+          "component": "Text",
+          "text": "Load more"
+        },
+        {
+          "id": "videos_section",
+          "component": "Column",
+          "children": [
+            "video_grid",
+            "load_more"
+          ]
+        },
+        {
+          "id": "back",
+          "component": "Button",
+          "child": "back_label",
+          "action": {
+            "event": {
+              "name": "back"
+            }
+          }
+        },
+        {
+          "id": "back_label",
+          "component": "Text",
+          "text": "Back"
+        }
+      ],
+      "model": {
+        "/author": {
+          "fields": {
+            "nickname": {
+              "sel": "h1[data-e2e=\"user-title\"]",
+              "get": "text"
+            },
+            "avatar": {
+              "sel": "img[class*=\"-ImgAvatar\"]",
+              "get": "src",
+              "as": "url"
+            },
+            "uniqueId": {
+              "sel": "h2[data-e2e=\"user-subtitle\"]",
+              "get": "text"
+            },
+            "following": {
+              "sel": "strong[data-e2e=\"following-count\"]",
+              "get": "text",
+              "as": "count"
+            },
+            "fans": {
+              "sel": "strong[data-e2e=\"followers-count\"]",
+              "get": "text",
+              "as": "count"
+            },
+            "heart": {
+              "sel": "strong[data-e2e=\"likes-count\"]",
+              "get": "text",
+              "as": "count"
+            },
+            "signature": {
+              "sel": "h2[data-e2e=\"user-bio\"]",
+              "get": "text"
+            }
+          }
+        },
+        "/videos": {
+          "each": "div[data-e2e=\"user-post-item\"]",
+          "key": "id",
+          "fields": {
+            "id": {
+              "sel": "a[href*=\"/video/\"]",
+              "get": "attr:href",
+              "re": "(\\d{6,})"
+            },
+            "url": {
+              "sel": "a[href*=\"/video/\"]",
+              "get": "attr:href",
+              "as": "url"
+            },
+            "cover": {
+              "sel": "picture img",
+              "get": "src",
+              "as": "url"
+            },
+            "playCount": {
+              "sel": "strong[data-e2e=\"video-views\"]",
+              "get": "text",
+              "as": "count"
+            }
+          }
+        },
+        "/page": {
+          "fields": {
+            "url": {
+              "get": "location"
+            }
+          }
+        },
+        "/feed": {
+          "net": {
+            "url": "/api/post/item_list",
+            "method": "GET",
+            "when": "$exists(itemList)",
+            "key": "id",
+            "mode": "append",
+            "select": "itemList.{ \"id\": id, \"desc\": desc, \"createTime\": createTime, \"stats\": stats, \"music\": music.title,\n    \"duration\": video.duration, \"cover\": video.cover, \"hashtags\": [textExtra.hashtagName], \"author\": author.uniqueId }"
+          }
+        },
+        "/grid": {
+          "fields": {
+            "hasLoader": {
+              "sel": "#loader",
+              "get": "attr:id"
+            },
+            "loaderText": {
+              "sel": "#loader",
+              "get": "text"
+            }
+          }
+        }
+      },
+      "anchors": {
+        "author_nickname": {
+          "model": "/author/nickname"
+        },
+        "author_avatar": {
+          "model": "/author/avatar"
+        },
+        "author_handle": {
+          "model": "/author/uniqueId"
+        },
+        "following_value": {
+          "model": "/author/following"
+        },
+        "fans_value": {
+          "model": "/author/fans"
+        },
+        "heart_value": {
+          "model": "/author/heart"
+        },
+        "author_bio": {
+          "model": "/author/signature"
+        },
+        "video_tile": {
+          "model": "/videos"
+        },
+        "load_more": {
+          "model": "/videos"
+        }
+      },
+      "actions": {
+        "openVideo": {
+          "op": "click",
+          "anchor": "video_tile",
+          "key": "id",
+          "reveal": "loadMore",
+          "intent": "Click the video thumbnail in the profile grid whose link contains {{id}}"
+        },
+        "loadMore": {
+          "op": "scroll",
+          "by": "page",
+          "intent": "Scroll the profile's video grid down so more thumbnails load"
+        },
+        "back": {
+          "op": "back",
+          "intent": "Go back to the previous page"
+        }
+      },
+      "settle": {
+        "quietMs": 300,
+        "timeoutMs": 30000
+      },
+      "fingerprint": {
+        "simhash": "8801c617",
+        "shape": [
+          "0:html",
+          "1:head",
+          "1:body",
+          "2:div",
+          "3:div",
+          "4:a",
+          "4:form",
+          "5:input",
+          "3:main",
+          "4:div",
+          "5:div",
+          "6:span",
+          "7:img",
+          "5:div",
+          "6:h1",
+          "6:h2",
+          "6:h3",
+          "7:div",
+          "8:strong",
+          "8:span",
+          "6:h2",
+          "4:div",
+          "5:div",
+          "6:div",
+          "7:div",
+          "8:a",
+          "9:div",
+          "10:picture",
+          "11:img",
+          "10:div",
+          "11:svg",
+          "11:strong",
+          "5:div"
+        ],
+        "ax": [
+          "0:RootWebArea",
+          "1:link",
+          "1:textbox",
+          "1:main",
+          "2:image",
+          "2:heading",
+          "2:heading",
+          "3:strong",
+          "2:heading",
+          "2:link",
+          "3:image",
+          "3:image",
+          "3:strong"
+        ],
+        "minSimilarity": 0.85
+      }
+    },
+    "video": {
+      "title": "TikTok video",
+      "match": {
+        "path": "^/@[^/]+/video/\\d+/?$",
+        "selector": "strong[data-e2e=\"like-count\"]"
+      },
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "back",
+            "video_card"
+          ]
+        },
+        {
+          "id": "author_name",
+          "component": "Text",
+          "text": {
+            "path": "/video/authorName"
+          },
+          "variant": "h3"
+        },
+        {
+          "id": "byline",
+          "component": "Text",
+          "text": {
+            "path": "/video/byline"
+          },
+          "variant": "body"
+        },
+        {
+          "id": "desc",
+          "component": "Text",
+          "text": {
+            "path": "/video/desc"
+          },
+          "variant": "body"
+        },
+        {
+          "id": "hashtag_list",
+          "component": "List",
+          "direction": "horizontal",
+          "children": {
+            "path": "/video/hashtags",
+            "componentId": "hashtag"
+          }
+        },
+        {
+          "id": "hashtag",
+          "component": "Text",
+          "text": {
+            "path": "name"
+          },
+          "variant": "caption"
+        },
+        {
+          "id": "music",
+          "component": "Text",
+          "text": {
+            "path": "/video/musicName"
+          },
+          "variant": "caption"
+        },
+        {
+          "id": "digg_stat",
+          "component": "Column",
+          "align": "center",
+          "children": [
+            "digg_value",
+            "digg_label"
+          ]
+        },
+        {
+          "id": "digg_value",
+          "component": "Text",
+          "text": {
+            "call": "formatNumber",
+            "args": {
+              "value": {
+                "path": "/video/diggCount"
+              }
+            },
+            "returnType": "string"
+          },
+          "variant": "h4"
+        },
+        {
+          "id": "digg_label",
+          "component": "Text",
+          "text": "Likes",
+          "variant": "caption"
+        },
+        {
+          "id": "comment_stat",
+          "component": "Column",
+          "align": "center",
+          "children": [
+            "comment_value",
+            "comment_label"
+          ]
+        },
+        {
+          "id": "comment_value",
+          "component": "Text",
+          "text": {
+            "call": "formatNumber",
+            "args": {
+              "value": {
+                "path": "/video/commentCount"
+              }
+            },
+            "returnType": "string"
+          },
+          "variant": "h4"
+        },
+        {
+          "id": "comment_label",
+          "component": "Text",
+          "text": "Comments",
+          "variant": "caption"
+        },
+        {
+          "id": "collect_stat",
+          "component": "Column",
+          "align": "center",
+          "children": [
+            "collect_value",
+            "collect_label"
+          ]
+        },
+        {
+          "id": "collect_value",
+          "component": "Text",
+          "text": {
+            "call": "formatNumber",
+            "args": {
+              "value": {
+                "path": "/video/collectCount"
+              }
+            },
+            "returnType": "string"
+          },
+          "variant": "h4"
+        },
+        {
+          "id": "collect_label",
+          "component": "Text",
+          "text": "Saves",
+          "variant": "caption"
+        },
+        {
+          "id": "share_stat",
+          "component": "Column",
+          "align": "center",
+          "children": [
+            "share_value",
+            "share_label"
+          ]
+        },
+        {
+          "id": "share_value",
+          "component": "Text",
+          "text": {
+            "call": "formatNumber",
+            "args": {
+              "value": {
+                "path": "/video/shareCount"
+              }
+            },
+            "returnType": "string"
+          },
+          "variant": "h4"
+        },
+        {
+          "id": "share_label",
+          "component": "Text",
+          "text": "Shares",
+          "variant": "caption"
+        },
+        {
+          "id": "header_row",
+          "component": "Row",
+          "align": "center",
+          "children": [
+            "author_name"
+          ]
+        },
+        {
+          "id": "stats_row",
+          "component": "Row",
+          "justify": "spaceEvenly",
+          "children": [
+            "digg_stat",
+            "comment_stat",
+            "collect_stat",
+            "share_stat"
+          ]
+        },
+        {
+          "id": "video_details",
+          "component": "Column",
+          "children": [
+            "header_row",
+            "stats_row",
+            "byline",
+            "desc",
+            "hashtag_list",
+            "music"
+          ]
+        },
+        {
+          "id": "video_card",
+          "component": "Card",
+          "child": "video_details"
+        },
+        {
+          "id": "back",
+          "component": "Button",
+          "child": "back_label",
+          "action": {
+            "event": {
+              "name": "back"
+            }
+          }
+        },
+        {
+          "id": "back_label",
+          "component": "Text",
+          "text": "Back"
+        }
+      ],
+      "model": {
+        "/video": {
+          "fields": {
+            "authorName": {
+              "sel": "span[data-e2e=\"browse-username\"]",
+              "get": "text"
+            },
+            "byline": {
+              "sel": "span[data-e2e=\"browser-nickname\"]",
+              "get": "text"
+            },
+            "desc": {
+              "sel": "div[data-e2e=\"video-desc\"], span[class*=\"-SpanText\"]",
+              "get": "text"
+            },
+            "hashtags": {
+              "each": "a[data-e2e=\"search-common-link\"]",
+              "key": "name",
+              "fields": {
+                "name": {
+                  "get": "text",
+                  "re": "^#(.+)$"
+                }
+              }
+            },
+            "musicName": {
+              "sel": "div[class*=\"-DivMusicText\"]",
+              "get": "text"
+            },
+            "diggCount": {
+              "sel": "strong[data-e2e=\"like-count\"]",
+              "get": "text",
+              "as": "count"
+            },
+            "commentCount": {
+              "sel": "strong[data-e2e=\"comment-count\"]",
+              "get": "text",
+              "as": "count"
+            },
+            "collectCount": {
+              "sel": "strong[data-e2e=\"favorite-count\"], strong[data-e2e=\"undefined-count\"]",
+              "get": "text",
+              "as": "count"
+            },
+            "shareCount": {
+              "sel": "strong[data-e2e=\"share-count\"]",
+              "get": "text",
+              "as": "count"
+            },
+            "nickname": {
+              "sel": "span[data-e2e=\"browser-nickname\"] > span:first-child",
+              "get": "text"
+            },
+            "createTimeText": {
+              "sel": "span[data-e2e=\"browser-nickname\"] > span:last-child",
+              "get": "text"
+            },
+            "duration": {
+              "sel": "script#__UNIVERSAL_DATA_FOR_REHYDRATION__",
+              "get": "json:/__DEFAULT_SCOPE__/webapp.video-detail/itemInfo/itemStruct/video/duration",
+              "as": "int"
+            },
+            "durationText": {
+              "sel": "span[data-e2e=\"cinema-playback-time\"]",
+              "get": "text",
+              "re": "/\\s*([\\d:]+)",
+              "as": "seconds"
+            },
+            "id": {
+              "get": "location",
+              "re": "/video/(\\d+)"
+            },
+            "url": {
+              "get": "location"
+            }
+          }
+        }
+      },
+      "anchors": {
+        "author_name": {
+          "model": "/video/authorName"
+        },
+        "byline": {
+          "model": "/video/byline"
+        },
+        "desc": {
+          "model": "/video/desc"
+        },
+        "hashtag_list": {
+          "model": "/video/hashtags"
+        },
+        "music": {
+          "model": "/video/musicName"
+        },
+        "digg_value": {
+          "model": "/video/diggCount"
+        },
+        "comment_value": {
+          "model": "/video/commentCount"
+        },
+        "collect_value": {
+          "model": "/video/collectCount"
+        },
+        "share_value": {
+          "model": "/video/shareCount"
+        }
+      },
+      "actions": {
+        "back": {
+          "op": "back",
+          "intent": "Close the video (✕ at the top-left of the player) to return to the profile grid"
+        }
+      },
+      "settle": {
+        "quietMs": 300,
+        "timeoutMs": 30000
+      },
+      "fingerprint": {
+        "simhash": "8901c617",
+        "shape": [
+          "0:html",
+          "1:head",
+          "1:body",
+          "2:div",
+          "3:div",
+          "4:a",
+          "4:form",
+          "5:input",
+          "3:div",
+          "4:div",
+          "5:button",
+          "5:canvas",
+          "4:div",
+          "5:div",
+          "6:a",
+          "7:img",
+          "6:div",
+          "7:a",
+          "8:span",
+          "7:span",
+          "8:span",
+          "5:div",
+          "6:span",
+          "6:a",
+          "7:strong",
+          "5:h4",
+          "6:a",
+          "7:div",
+          "5:div",
+          "6:button",
+          "7:span",
+          "7:strong"
+        ],
+        "ax": [
+          "0:RootWebArea",
+          "1:link",
+          "1:textbox",
+          "1:button",
+          "1:link",
+          "1:link",
+          "2:strong",
+          "1:link",
+          "2:strong",
+          "1:link",
+          "2:strong",
+          "1:heading",
+          "2:link",
+          "1:button",
+          "2:strong"
+        ],
+        "minSimilarity": 0.85
+      }
+    }
+  },
+  "policies": {
+    "timeouts": {
+      "navigate": 45000,
+      "await": 25000,
+      "action": 20000,
+      "input": 10000
+    },
+    "retry": {
+      "attempts": 4,
+      "baseMs": 800,
+      "maxMs": 10000,
+      "jitter": 0.3
+    },
+    "rateLimit": {
+      "minDelayMs": 250,
+      "jitterMs": 400
+    },
+    "dismiss": [
+      {
+        "sel": "[data-e2e=\"modal-close-inner-button\"]",
+        "intent": "Close the login prompt"
+      }
+    ],
+    "blocked": {
+      "selectors": [
+        "#captcha-verify-container",
+        "[id*=\"captcha_container\"]",
+        "iframe[src*=\"captcha\"]"
+      ],
+      "textPatterns": [
+        "verify to continue",
+        "drag the slider"
+      ],
+      "action": "fail"
+    },
+    "http": {
+      "retry": [
+        408,
+        425,
+        429,
+        500,
+        502,
+        503,
+        504
+      ],
+      "fatal": [
+        401,
+        403,
+        404,
+        410
+      ]
+    }
+  },
+  "control": {
+    "dataModel": {
+      "inputs": {
+        "profiles": "",
+        "resultsPerPage": 10
+      }
+    },
+    "components": [
+      {
+        "id": "root",
+        "component": "Column",
+        "children": [
+          "form_card",
+          "work_card"
+        ]
+      },
+      {
+        "id": "form_card",
+        "component": "Card",
+        "child": "form"
+      },
+      {
+        "id": "form",
+        "component": "Column",
+        "children": [
+          "form_title",
+          "profiles_field",
+          "rpp_slider",
+          "start_button",
+          "status_text",
+          "attention_text",
+          "resume_button"
+        ]
+      },
+      {
+        "id": "form_title",
+        "component": "Text",
+        "text": "TikTok profile scraper",
+        "variant": "h3"
+      },
+      {
+        "id": "profiles_field",
+        "component": "TextField",
+        "label": "Profiles (comma separated)",
+        "value": {
+          "path": "/inputs/profiles"
+        },
+        "variant": "shortText"
+      },
+      {
+        "id": "rpp_slider",
+        "component": "Slider",
+        "label": "Videos per profile",
+        "min": 1,
+        "max": 50,
+        "value": {
+          "path": "/inputs/resultsPerPage"
+        }
+      },
+      {
+        "id": "start_button",
+        "component": "Button",
+        "variant": "primary",
+        "child": "start_label",
+        "checks": [
+          {
+            "condition": {
+              "call": "required",
+              "args": {
+                "value": {
+                  "path": "/inputs/profiles"
+                }
+              }
+            },
+            "message": "Enter at least one profile"
+          }
+        ],
+        "action": {
+          "event": {
+            "name": "start",
+            "context": {
+              "profiles": {
+                "path": "/inputs/profiles"
+              },
+              "resultsPerPage": {
+                "path": "/inputs/resultsPerPage"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "start_label",
+        "component": "Text",
+        "text": "Scrape"
+      },
+      {
+        "id": "status_text",
+        "component": "Text",
+        "variant": "caption",
+        "text": {
+          "call": "formatString",
+          "args": {
+            "value": "${/status/state} · authors ${/status/tiktok_author} · videos ${/status/tiktok_video}"
+          },
+          "returnType": "string"
+        }
+      },
+      {
+        "id": "attention_text",
+        "component": "Text",
+        "variant": "body",
+        "text": {
+          "path": "/attention/message"
+        }
+      },
+      {
+        "id": "resume_button",
+        "component": "Button",
+        "child": "resume_label",
+        "action": {
+          "event": {
+            "name": "resume"
+          }
+        }
+      },
+      {
+        "id": "resume_label",
+        "component": "Text",
+        "text": "Resume"
+      },
+      {
+        "id": "work_card",
+        "component": "Card",
+        "child": "work"
+      },
+      {
+        "id": "work",
+        "component": "Column",
+        "children": [
+          "work_title",
+          "work_totals",
+          "work_list"
+        ]
+      },
+      {
+        "id": "work_title",
+        "component": "Text",
+        "text": "Units of work",
+        "variant": "h4"
+      },
+      {
+        "id": "work_totals",
+        "component": "Text",
+        "variant": "caption",
+        "text": {
+          "call": "formatString",
+          "args": {
+            "value": "profiles ${/work/totals/profile/done}✓ ${/work/totals/profile/failed}✗ · videos ${/work/totals/video/done}✓ ${/work/totals/video/failed}✗ ${/work/totals/video/running}…"
+          },
+          "returnType": "string"
+        }
+      },
+      {
+        "id": "work_list",
+        "component": "List",
+        "direction": "vertical",
+        "children": {
+          "path": "/work/units",
+          "componentId": "work_row"
+        }
+      },
+      {
+        "id": "work_row",
+        "component": "Row",
+        "justify": "spaceBetween",
+        "children": [
+          "work_row_id",
+          "work_row_status"
+        ]
+      },
+      {
+        "id": "work_row_id",
+        "component": "Text",
+        "variant": "caption",
+        "text": {
+          "path": "id"
+        }
+      },
+      {
+        "id": "work_row_status",
+        "component": "Text",
+        "variant": "caption",
+        "text": {
+          "call": "formatString",
+          "args": {
+            "value": "${status} ×${attempts} ${error}"
+          },
+          "returnType": "string"
+        }
+      }
+    ]
+  },
+  "machine": {
+    "id": "tiktok.profile",
+    "initial": "idle",
+    "context": {
+      "profiles": [],
+      "resultsPerPage": 10,
+      "handle": null,
+      "author": null,
+      "queue": [],
+      "v": null,
+      "stall": 0,
+      "done": 0,
+      "error": null
+    },
+    "on": {
+      "INTERRUPT": {
+        "target": ".interrupted"
+      }
+    },
+    "states": {
+      "interrupted": {
+        "description": "An interrupt view is over the page: press its `dismiss` button (A2UI action), then resume.",
+        "entry": [
+          {
+            "type": "log",
+            "params": {
+              "text": "interrupt: {{ event.view }}"
+            }
+          }
+        ],
+        "invoke": {
+          "src": "a2ui.act",
+          "input": {
+            "on": "dismiss"
+          },
+          "onDone": {
+            "target": "resume"
+          },
+          "onError": {
+            "target": "resume"
+          }
+        }
+      },
+      "resume": {
+        "type": "history",
+        "history": "deep"
+      },
+      "idle": {
+        "description": "Waiting for the control surface's `start` event (A2UI action from any client).",
+        "on": {
+          "start": {
+            "target": "nextProfile",
+            "actions": [
+              {
+                "type": "ctx.set",
+                "params": {
+                  "profiles": "{{ event.context.profiles | csv }}",
+                  "resultsPerPage": "{{ event.context.resultsPerPage | int }}"
+                }
+              },
+              {
+                "type": "a2ui.write",
+                "params": {
+                  "path": "/run",
+                  "value": {
+                    "profiles": "{{ event.context.profiles | csv }}",
+                    "resultsPerPage": "{{ event.context.resultsPerPage | int }}"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "nextProfile": {
+        "always": [
+          {
+            "guard": {
+              "type": "cond",
+              "params": {
+                "empty": "{{ profiles }}"
+              }
+            },
+            "target": "done"
+          },
+          {
+            "target": "profileUnit",
+            "actions": [
+              {
+                "type": "ctx.shift",
+                "params": {
+                  "from": "profiles",
+                  "to": "handle"
+                }
+              },
+              {
+                "type": "ctx.set",
+                "params": {
+                  "done": 0,
+                  "stall": 0
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "profileUnit": {
+        "description": "Unit `profile:<handle>`; already-completed units (ledger) are skipped — reruns are idempotent.",
+        "always": [
+          {
+            "guard": {
+              "type": "work.done",
+              "params": {
+                "type": "profile",
+                "key": "{{ handle | trimAt }}"
+              }
+            },
+            "target": "nextProfile",
+            "actions": [
+              {
+                "type": "log",
+                "params": {
+                  "text": "skip profile {{ handle }} (done in ledger)"
+                }
+              }
+            ]
+          },
+          {
+            "target": "openProfile",
+            "actions": [
+              {
+                "type": "work.start",
+                "params": {
+                  "type": "profile",
+                  "key": "{{ handle | trimAt }}"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "openProfile": {
+        "invoke": {
+          "src": "browser.navigate",
+          "input": {
+            "url": "/@{{ handle | trimAt }}"
+          },
+          "onDone": "awaitProfile",
+          "onError": "profileFailed"
+        }
+      },
+      "awaitProfile": {
+        "description": "Branch on which state the page is actually in: profile, not found, or private.",
+        "invoke": {
+          "src": "view.await",
+          "input": {
+            "views": [
+              "profile",
+              "notFound",
+              "privateAccount"
+            ]
+          },
+          "onError": "profileFailed",
+          "onDone": [
+            {
+              "guard": {
+                "type": "cond",
+                "params": {
+                  "eq": [
+                    "{{ event.output.view }}",
+                    "notFound"
+                  ]
+                }
+              },
+              "target": "nextProfile",
+              "actions": [
+                {
+                  "type": "work.skip",
+                  "params": {
+                    "type": "profile",
+                    "key": "{{ handle | trimAt }}",
+                    "reason": "not found"
+                  }
+                }
+              ]
+            },
+            {
+              "guard": {
+                "type": "cond",
+                "params": {
+                  "eq": [
+                    "{{ event.output.view }}",
+                    "privateAccount"
+                  ]
+                }
+              },
+              "target": "nextProfile",
+              "actions": [
+                {
+                  "type": "work.skip",
+                  "params": {
+                    "type": "profile",
+                    "key": "{{ handle | trimAt }}",
+                    "reason": "private account"
+                  }
+                }
+              ]
+            },
+            {
+              "target": "loadGrid",
+              "actions": [
+                {
+                  "type": "route.emit",
+                  "params": {
+                    "route": "tiktok.author"
+                  }
+                },
+                {
+                  "type": "ctx.set",
+                  "params": {
+                    "author": {
+                      "$model": "/author"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "loadGrid": {
+        "description": "Dispatch the A2UI `loadMore` action until enough tiles are projected or the grid stops growing.",
+        "always": [
+          {
+            "guard": {
+              "type": "cond",
+              "params": {
+                "or": [
+                  {
+                    "gte": [
+                      {
+                        "count": "/feed"
+                      },
+                      "{{ resultsPerPage }}"
+                    ]
+                  },
+                  {
+                    "and": [
+                      {
+                        "not": {
+                          "exists": "/feed/0"
+                        }
+                      },
+                      {
+                        "gte": [
+                          {
+                            "count": "/videos"
+                          },
+                          "{{ resultsPerPage }}"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "and": [
+                      {
+                        "exists": "/grid/hasLoader"
+                      },
+                      {
+                        "not": {
+                          "exists": "/grid/loaderText"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "stalled": 3
+                  }
+                ]
+              }
+            },
+            "target": "gridLoaded"
+          },
+          {
+            "target": "loadingMore"
+          }
+        ]
+      },
+      "loadingMore": {
+        "invoke": {
+          "src": "a2ui.act",
+          "input": {
+            "on": "load_more",
+            "action": "loadMore"
+          },
+          "onError": {
+            "target": "gridLoaded",
+            "actions": [
+              {
+                "type": "log",
+                "params": {
+                  "text": "loadMore gave up; continuing with the tiles we have"
+                }
+              }
+            ]
+          },
+          "onDone": {
+            "target": "loadGrid",
+            "actions": [
+              {
+                "type": "ctx.stall",
+                "params": {
+                  "count": {
+                    "$count": "/videos"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "gridLoaded": {
+        "description": "Prefer the network feed (one emit, no navigation); fall back to opening each video.",
+        "always": [
+          {
+            "guard": {
+              "type": "cond",
+              "params": {
+                "exists": "/feed/0"
+              }
+            },
+            "target": "syncFeed"
+          },
+          {
+            "guard": {
+              "type": "cond",
+              "params": {
+                "eq": [
+                  {
+                    "count": "/videos"
+                  },
+                  0
+                ]
+              }
+            },
+            "target": "profileComplete",
+            "actions": [
+              {
+                "type": "log",
+                "params": {
+                  "text": "{{ handle }}: no videos"
+                }
+              }
+            ]
+          },
+          {
+            "target": "queueVideos",
+            "actions": [
+              {
+                "type": "log",
+                "params": {
+                  "text": "{{ handle }}: feed unavailable — opening videos (slow path)"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "syncFeed": {
+        "description": "Response bodies are parsed asynchronously: let the feed catch up with the rendered tiles, then emit once.",
+        "invoke": {
+          "src": "view.await",
+          "input": {
+            "view": "profile",
+            "until": {
+              "gte": [
+                {
+                  "count": "/feed"
+                },
+                {
+                  "count": "/videos"
+                }
+              ]
+            },
+            "timeoutMs": 5000
+          },
+          "onDone": {
+            "target": "profileComplete",
+            "actions": [
+              {
+                "type": "route.emit",
+                "params": {
+                  "route": "tiktok.video"
+                }
+              }
+            ]
+          },
+          "onError": {
+            "target": "profileComplete",
+            "actions": [
+              {
+                "type": "log",
+                "params": {
+                  "text": "feed lagging tiles; emitting what was captured"
+                }
+              },
+              {
+                "type": "route.emit",
+                "params": {
+                  "route": "tiktok.video"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "queueVideos": {
+        "entry": [
+          {
+            "type": "ctx.set",
+            "params": {
+              "queue": {
+                "$model": "/videos"
+              }
+            }
+          }
+        ],
+        "always": {
+          "target": "nextVideo"
+        }
+      },
+      "nextVideo": {
+        "always": [
+          {
+            "guard": {
+              "type": "cond",
+              "params": {
+                "or": [
+                  {
+                    "empty": "{{ queue }}"
+                  },
+                  {
+                    "gte": [
+                      "{{ done }}",
+                      "{{ resultsPerPage }}"
+                    ]
+                  }
+                ]
+              }
+            },
+            "target": "profileComplete"
+          },
+          {
+            "target": "videoUnit",
+            "actions": [
+              {
+                "type": "ctx.shift",
+                "params": {
+                  "from": "queue",
+                  "to": "v"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "videoUnit": {
+        "always": [
+          {
+            "guard": {
+              "type": "work.done",
+              "params": {
+                "type": "video",
+                "key": "{{ v.id }}"
+              }
+            },
+            "target": "nextVideo",
+            "actions": [
+              {
+                "type": "ctx.inc",
+                "params": {
+                  "key": "done"
+                }
+              }
+            ]
+          },
+          {
+            "target": "openingVideo",
+            "actions": [
+              {
+                "type": "work.start",
+                "params": {
+                  "type": "video",
+                  "key": "{{ v.id }}",
+                  "parent": "profile:{{ handle | trimAt }}"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "openingVideo": {
+        "invoke": {
+          "src": "a2ui.act",
+          "input": {
+            "on": "video_tile",
+            "action": "openVideo",
+            "item": {
+              "id": "{{ v.id }}"
+            },
+            "expect": [
+              "video",
+              "videoUnavailable"
+            ],
+            "within": 15000
+          },
+          "onDone": "awaitVideo",
+          "onError": "videoFailed"
+        }
+      },
+      "awaitVideo": {
+        "invoke": {
+          "src": "view.await",
+          "input": {
+            "views": [
+              "video",
+              "videoUnavailable"
+            ]
+          },
+          "onError": "videoFailed",
+          "onDone": [
+            {
+              "guard": {
+                "type": "cond",
+                "params": {
+                  "eq": [
+                    "{{ event.output.view }}",
+                    "videoUnavailable"
+                  ]
+                }
+              },
+              "target": "closingVideo",
+              "actions": [
+                {
+                  "type": "work.skip",
+                  "params": {
+                    "type": "video",
+                    "key": "{{ v.id }}",
+                    "reason": "unavailable"
+                  }
+                }
+              ]
+            },
+            {
+              "target": "closingVideo",
+              "actions": [
+                {
+                  "type": "route.emit",
+                  "params": {
+                    "route": "tiktok.video.detail"
+                  }
+                },
+                {
+                  "type": "work.complete",
+                  "params": {
+                    "type": "video",
+                    "key": "{{ v.id }}"
+                  }
+                },
+                {
+                  "type": "ctx.inc",
+                  "params": {
+                    "key": "done"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "closingVideo": {
+        "invoke": {
+          "src": "a2ui.act",
+          "input": {
+            "on": "back",
+            "action": "back",
+            "expect": "profile"
+          },
+          "onDone": "awaitBack",
+          "onError": "recoverProfile"
+        }
+      },
+      "awaitBack": {
+        "invoke": {
+          "src": "view.await",
+          "input": {
+            "view": "profile"
+          },
+          "onDone": "nextVideo",
+          "onError": "recoverProfile"
+        }
+      },
+      "videoFailed": {
+        "description": "Isolate the failure to this unit, then get back to a known state.",
+        "entry": [
+          {
+            "type": "work.fail",
+            "params": {
+              "type": "video",
+              "key": "{{ v.id }}",
+              "error": "{{ event.error.message }}"
+            }
+          }
+        ],
+        "always": {
+          "target": "recoverProfile"
+        }
+      },
+      "recoverProfile": {
+        "invoke": {
+          "src": "browser.navigate",
+          "input": {
+            "url": "/@{{ handle | trimAt }}"
+          },
+          "onDone": "awaitRecovered",
+          "onError": "profileFailed"
+        }
+      },
+      "awaitRecovered": {
+        "invoke": {
+          "src": "view.await",
+          "input": {
+            "view": "profile"
+          },
+          "onDone": "nextVideo",
+          "onError": "profileFailed"
+        }
+      },
+      "profileComplete": {
+        "entry": [
+          {
+            "type": "work.complete",
+            "params": {
+              "type": "profile",
+              "key": "{{ handle | trimAt }}"
+            }
+          }
+        ],
+        "always": {
+          "target": "nextProfile"
+        }
+      },
+      "profileFailed": {
+        "entry": [
+          {
+            "type": "work.fail",
+            "params": {
+              "type": "profile",
+              "key": "{{ handle | trimAt }}",
+              "error": "{{ event.error.message }}"
+            }
+          }
+        ],
+        "always": {
+          "target": "nextProfile"
+        }
+      },
+      "done": {
+        "type": "final"
+      }
+    }
+  },
+  "provenance": {
+    "derivedAt": "2026-10-06T03:57:15.344Z",
+    "derivedFrom": "fixtures/tiktok-mock (mirrors tiktok.com data-e2e contract); 2 samples per view",
+    "refinement": "flows/tiktok-profile/*.patch.json — vision review of out/derive/*.annotated.png + canvas frames",
+    "reports": [
+      {
+        "view": "profile",
+        "samples": [
+          "http://127.0.0.1:49489/@chef.nova",
+          "http://127.0.0.1:49489/@dance.mike"
+        ],
+        "lists": [
+          {
+            "name": "userPosts",
+            "itemSel": "div[data-e2e=\"user-post-item\"]",
+            "count": [
+              12,
+              12
+            ],
+            "fields": [
+              "id",
+              "url",
+              "cover",
+              "videoViews"
+            ],
+            "dropped": []
+          }
+        ],
+        "fields": [
+          {
+            "name": "avatar",
+            "sel": "img[class*=\"-ImgAvatar\"]",
+            "kind": "image",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "userTitle",
+            "sel": "h1[data-e2e=\"user-title\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "userSubtitle",
+            "sel": "h2[data-e2e=\"user-subtitle\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "number",
+            "sel": "div[class*=\"-DivNumber\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "followingCount",
+            "sel": "strong[data-e2e=\"following-count\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "following",
+            "sel": "span[data-e2e=\"following\"]",
+            "kind": "text",
+            "varies": false,
+            "kept": false,
+            "reason": "static label"
+          },
+          {
+            "name": "followersCount",
+            "sel": "strong[data-e2e=\"followers-count\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "followers",
+            "sel": "span[data-e2e=\"followers\"]",
+            "kind": "text",
+            "varies": false,
+            "kept": false,
+            "reason": "static label"
+          },
+          {
+            "name": "likesCount",
+            "sel": "strong[data-e2e=\"likes-count\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "likes",
+            "sel": "span[data-e2e=\"likes\"]",
+            "kind": "text",
+            "varies": false,
+            "kept": false,
+            "reason": "static label"
+          },
+          {
+            "name": "userBio",
+            "sel": "h2[data-e2e=\"user-bio\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "text",
+            "sel": "#loader",
+            "kind": "text",
+            "varies": false,
+            "kept": false,
+            "reason": "static label"
+          }
+        ],
+        "unstable": [],
+        "anchorsResolved": "10/10",
+        "refine": {
+          "applied": true,
+          "missing": [],
+          "notes": "DivNumber group duplicates the three stat counters; '…-count' strongs pair with static labels Following/Followers/Likes. Verified against tiktok.com: user-title is the display name, user-subtitle the @handle.",
+          "inference": {
+            "source": "cache:agent",
+            "status": "hit",
+            "distance": 0,
+            "key": "5e45ead9fe0fb97d8ad987e0ea1ed57b"
+          }
+        }
+      },
+      {
+        "view": "video",
+        "samples": [
+          "http://127.0.0.1:49489/@chef.nova/video/7300168204254703003",
+          "http://127.0.0.1:49489/@dance.mike/video/7300967627637088007"
+        ],
+        "lists": [],
+        "fields": [
+          {
+            "name": "videoCanvas",
+            "sel": "canvas[data-e2e=\"video-canvas\"]",
+            "kind": "canvas",
+            "varies": false,
+            "kept": true
+          },
+          {
+            "name": "browseUsername",
+            "sel": "span[data-e2e=\"browse-username\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "browserNickname",
+            "sel": "span[data-e2e=\"browser-nickname\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "text",
+            "sel": "span[class*=\"-SpanText\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "searchCommonLink",
+            "sel": "a[data-e2e=\"search-common-link\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "musicText",
+            "sel": "div[class*=\"-DivMusicText\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "likeCount",
+            "sel": "strong[data-e2e=\"like-count\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "commentCount",
+            "sel": "strong[data-e2e=\"comment-count\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "undefinedCount",
+            "sel": "strong[data-e2e=\"undefined-count\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          },
+          {
+            "name": "shareCount",
+            "sel": "strong[data-e2e=\"share-count\"]",
+            "kind": "text",
+            "varies": true,
+            "kept": true
+          }
+        ],
+        "unstable": [],
+        "anchorsResolved": "10/10",
+        "refine": {
+          "applied": true,
+          "missing": [],
+          "notes": "undefined-count sits under the bookmark icon, i.e. collectCount; byline = nickname · date; the clip duration is only rendered into the <canvas> frame, not the DOM — source it from __UNIVERSAL_DATA_FOR_REHYDRATION__ instead. The canvas frame animates (like a playing <video>), so it is dropped from the live surface: streaming it would keep the model from ever settling.",
+          "inference": {
+            "source": "cache:agent",
+            "status": "hit",
+            "distance": 0,
+            "key": "b4ff41684f0553dbb226fb658e075aa4"
+          }
+        }
+      }
+    ]
+  }
+}

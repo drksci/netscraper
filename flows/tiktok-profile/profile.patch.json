@@ -1,0 +1,63 @@
+{
+  "viewTitle": "TikTok profile",
+  "models": {
+    "/profile": "/author",
+    "/userPosts": "/videos"
+  },
+  "fields": {
+    "/profile": {
+      "userTitle": "nickname",
+      "userSubtitle": "uniqueId",
+      "userBio": "signature",
+      "followingCount": "following",
+      "followersCount": "fans",
+      "likesCount": "heart"
+    },
+    "/userPosts": {
+      "videoViews": "playCount"
+    }
+  },
+  "components": {
+    "profile_card": "author_card",
+    "profile_details": "author_details",
+    "user_title": "author_nickname",
+    "user_subtitle": "author_handle",
+    "user_bio": "author_bio",
+    "avatar": "author_avatar",
+    "following_count": "following_value",
+    "following_count_group": "following_stat",
+    "following_count_label": "following_label",
+    "followers_count": "fans_value",
+    "followers_count_group": "fans_stat",
+    "followers_count_label": "fans_label",
+    "likes_count": "heart_value",
+    "likes_count_group": "heart_stat",
+    "likes_count_label": "heart_label",
+    "user_posts_section": "videos_section",
+    "user_posts_list": "video_grid",
+    "user_posts_item": "video_tile",
+    "user_posts_card": "video_card",
+    "user_posts_card_col": "video_card_body",
+    "user_posts_cover": "video_cover",
+    "user_posts_video_views": "video_plays",
+    "user_posts_load_more": "load_more",
+    "user_posts_load_more_label": "load_more_label"
+  },
+  "actions": {
+    "openUserPost": "openVideo"
+  },
+  "variants": {
+    "user_title": "h2",
+    "user_subtitle": "h4",
+    "user_bio": "body"
+  },
+  "drop": [
+    "number",
+    "number_item"
+  ],
+  "intents": {
+    "openUserPost": "Click the video thumbnail in the profile grid whose link contains {{id}}",
+    "loadMore": "Scroll the profile's video grid down so more thumbnails load"
+  },
+  "notes": "DivNumber group duplicates the three stat counters; '\u2026-count' strongs pair with static labels Following/Followers/Likes. Verified against tiktok.com: user-title is the display name, user-subtitle the @handle."
+}

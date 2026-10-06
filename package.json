@@ -1,0 +1,54 @@
+{
+  "name": "netscraper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Portable web scrapers shipped as one manifest: XState + A2UI, run on any browser driver, or as WASM.",
+  "bin": {
+    "a2flow": "./bin/a2flow.ts"
+  },
+  "scripts": {
+    "a2flow": "tsx bin/a2flow.ts",
+    "mock": "tsx fixtures/tiktok-mock/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "studio:server": "tsx src/studio/server.ts",
+    "studio:ui": "npm --prefix studio run dev -- --port 3100",
+    "test:unit": "A2FLOW_SKIP_E2E=1 node --import tsx --test test/*.test.ts",
+    "build:actor": "node scripts/build-actor.mjs",
+    "actor:live": "tsx scripts/wasm-actor-live.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@iocium/domhash": "^0.2.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/resources": "^2.11.0",
+    "@opentelemetry/sdk-trace-base": "^2.11.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
+    "ajv": "^8.20.0",
+    "cloakbrowser": "^0.5.12",
+    "jpeg-js": "^0.4.4",
+    "jsonata": "^2.2.2",
+    "playwright-core": "^1.63.0",
+    "pngjs": "^7.0.0",
+    "puppeteer-core": "^25.12.0",
+    "ws": "^8.22.0",
+    "xstate": "^5.33.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/pngjs": "^6.0.5",
+    "@types/ws": "^8.18.2",
+    "beautiful-mermaid": "^1.1.3",
+    "esbuild": "^0.28.2",
+    "quickjs-emscripten": "^0.32.0",
+    "sharp": "^0.35.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

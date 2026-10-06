@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+scratch/
+data/
+.a2flow-cache/
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts
+.env*
+# built by `npm run build:actor`
+studio/public/actor/

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>a2flow viewer</title>
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--fg:#14161a;--muted:#6b7280;--line:#e3e6ea;--ok:#15803d;--bad:#b91c1c;--accent:#2563eb;--a2-card:#fff;--a2-line:#e5e7eb;--a2-fg:#14161a}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--panel:#171a20;--fg:#e8eaed;--muted:#9aa0a6;--line:#2a2f37;--ok:#4ade80;--bad:#f87171;--accent:#60a5fa;--a2-card:#1d2128;--a2-line:#2f353e;--a2-fg:#e8eaed}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.45 system-ui,-apple-system,sans-serif}
+header{display:flex;gap:16px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:2;flex-wrap:wrap}
+header h1{font-size:14px;margin:0;font-weight:650}header .meta{color:var(--muted)}
+.pill{padding:2px 8px;border-radius:99px;border:1px solid var(--line);font-variant-numeric:tabular-nums}
+.pill.ok{color:var(--ok)}.pill.bad{color:var(--bad)}
+main{display:grid;grid-template-columns:1fr 1fr 360px;gap:12px;padding:12px;height:calc(100vh - 46px)}
+main.single{grid-template-columns:1fr 1fr 320px}
+section{background:var(--panel);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+section>h2{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:0;padding:8px 12px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px}
+.body{overflow:auto;padding:10px;flex:1;min-height:0}
+.screen{width:100%;display:block;border-radius:6px;background:#0002}
+.mini{margin-top:10px}.mini h3{font-size:11px;color:var(--muted);margin:0 0 4px;font-weight:600;text-transform:uppercase}
+#log{font:12px ui-monospace,SFMono-Regular,Menlo,monospace}
+.ev{padding:4px 6px;border-bottom:1px dashed var(--line);display:grid;grid-template-columns:auto 1fr;gap:6px}
+.ev .k{font-weight:700}.ev.pass .k{color:var(--ok)}.ev.fail .k{color:var(--bad)}.ev .d{color:var(--muted);word-break:break-word}
+#control:not(:empty){margin-bottom:10px}.mstate{font:12px ui-monospace,Menlo,monospace;color:var(--muted);margin:0 0 10px}
+#items{font:12px ui-monospace,Menlo,monospace;max-height:30%;overflow:auto;border-top:1px solid var(--line);padding:6px 10px}
+@media (max-width:1000px){main,main.single{grid-template-columns:1fr;height:auto}section{max-height:80vh}}
+</style>
+<style id="a2css"></style>
+</head>
+<body>
+<header>
+  <h1 id="title">a2flow</h1><span class="meta" id="step">waiting…</span>
+  <span class="pill" id="msgs">0 msgs</span><span class="pill ok" id="pass">0 pass</span><span class="pill bad" id="fail">0 fail</span><span class="pill" id="itemsN">0 items</span>
+</header>
+<main id="main">
+  <section id="laneM"><h2><span>Lane M · multimodal browser-use</span><span id="mUrl"></span></h2><div class="body"><img class="screen" id="frameM" alt="lane M screencast"></div></section>
+  <section><h2><span>A2UI surfaces (lane A stream)</span><span id="sid"></span></h2>
+    <div class="body"><div id="control"></div><div id="machine" class="mstate"></div><div id="surface"></div></div></section>
+  <section><h2><span>Lane A · A2UI-driven</span><span id="aView"></span></h2>
+    <div class="body"><img class="screen" id="frameA" alt="lane A screencast"><div class="mini"><h3>checks &amp; actions</h3><div id="log"></div></div></div>
+    <div id="items"></div></section>
+</main>
+<script type="module">
+import { A2UIClient, A2UI_CSS } from "./a2ui-renderer.js";
+document.getElementById("a2css").textContent = A2UI_CSS;
+const $ = (id) => document.getElementById(id);
+const ws = new WebSocket(`ws://${location.host}/ws`);
+const client = new A2UIClient({ onAction: (action) => ws.send(JSON.stringify({ type: "action", action })) });
+let msgs = 0, pass = 0, fail = 0, items = 0, raf = 0;
+// control surface (user input, write contract) is mounted once and only re-mounted when the server changes it,
+// so typing isn't clobbered; page surfaces re-render on every stream message.
+let controlDirty = true;
+const pageSurface = () => [...client.order].reverse().find((id) => !id.startsWith("control"));
+const controlSurface = () => client.order.find((id) => id.startsWith("control"));
+const rerender = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => {
+  if (pageSurface()) client.mount($("surface"), pageSurface()); else $("surface").innerHTML = "";
+  if (controlSurface() && controlDirty) { client.mount($("control"), controlSurface()); controlDirty = false; }
+  $("sid").textContent = pageSurface() ?? ""; }); };
+const log = (cls, k, d) => {
+  const el = document.createElement("div"); el.className = "ev " + cls;
+  el.innerHTML = `<span class="k"></span><span class="d"></span>`; el.children[0].textContent = k; el.children[1].textContent = d;
+  $("log").prepend(el); while ($("log").children.length > 300) $("log").lastChild.remove();
+};
+ws.onmessage = (e) => {
+  const m = JSON.parse(e.data);
+  if (m.type === "hello") {
+    $("title").textContent = m.title ?? m.flow;
+    if (!m.lanes.includes("M")) { $("laneM").remove(); $("main").classList.add("single"); }
+  } else if (m.type === "frame") $(m.lane === "M" ? "frameM" : "frameA").src = "data:image/jpeg;base64," + m.data;
+  else if (m.type === "a2ui" && m.lane === "A") {
+    client.apply(m.msg);
+    const sid = m.msg.createSurface?.surfaceId ?? m.msg.updateComponents?.surfaceId ?? m.msg.updateDataModel?.surfaceId ?? "";
+    if (sid.startsWith("control") && !(m.msg.updateDataModel && m.msg.updateDataModel.path?.startsWith("/inputs"))) controlDirty = true;
+    $("msgs").textContent = `${++msgs} msgs`; rerender();
+  }
+  else if (m.type === "state") $("machine").textContent = `machine: ${typeof m.value === "string" ? m.value : JSON.stringify(m.value)}`;
+  else if (m.type === "client") log("", "action", `${m.msg.action.name} ← ${m.msg.action.sourceComponentId} ${JSON.stringify(m.msg.action.context)}`);
+  else if (m.type === "step") { $("step").textContent = `${m.path} · ${m.kind}`; $("aView").textContent = m.view ?? ""; if (m.mUrl) $("mUrl").textContent = m.mUrl; }
+  else if (m.type === "check") { m.pass ? $("pass").textContent = `${++pass} pass` : $("fail").textContent = `${++fail} fail`; log(m.pass ? "pass" : "fail", m.check, `${m.step} · ${m.detail}`); }
+  else if (m.type === "item") { $("itemsN").textContent = `${++items} items`; const d = document.createElement("div"); d.textContent = `${m.route} ${JSON.stringify(m.item).slice(0, 160)}`; $("items").prepend(d); }
+  else if (m.type === "log") log("fail", "log", m.text);
+  else if (m.type === "done") log(m.report.passed ? "pass" : "fail", "done", JSON.stringify(m.report.summary));
+};
+</script>
+</body>
+</html>

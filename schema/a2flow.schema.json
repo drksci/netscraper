@@ -1,0 +1,979 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://a2flow.dev/schema/0.1/a2flow.schema.json",
+  "title": "a2flow manifest",
+  "description": "A portable browser flow: output routes, A2UI v0.9 views projected from a live page, and A2UI-level steps. Components are additionally validated against the A2UI catalog named by a2ui.catalogId.",
+  "type": "object",
+  "required": [
+    "a2flow",
+    "id",
+    "a2ui",
+    "target",
+    "inputs",
+    "routes",
+    "views"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "a2flow": {
+      "enum": [
+        "0.1",
+        "0.2"
+      ]
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "a2ui": {
+      "type": "object",
+      "required": [
+        "version",
+        "catalogId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "v0.9"
+        },
+        "catalogId": {
+          "type": "string"
+        },
+        "theme": {
+          "type": "object"
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "baseUrl"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "baseUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "viewport": {
+          "type": "object",
+          "required": [
+            "width",
+            "height"
+          ],
+          "properties": {
+            "width": {
+              "type": "integer"
+            },
+            "height": {
+              "type": "integer"
+            }
+          }
+        },
+        "browser": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "humanize": {
+              "type": "boolean"
+            },
+            "headless": {
+              "type": "boolean"
+            },
+            "locale": {
+              "type": "string"
+            },
+            "timezone": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "description": "JSON Schema for the flow's input object."
+    },
+    "routes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "schema"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "schema": {
+            "type": "object"
+          },
+          "key": {
+            "type": "string"
+          },
+          "map": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "from": {
+            "type": "object",
+            "required": [
+              "view"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "view": {
+                "type": "string"
+              },
+              "on": {
+                "enum": [
+                  "close",
+                  "item"
+                ]
+              },
+              "each": {
+                "type": "string"
+              }
+            }
+          },
+          "extract": {
+            "type": "string",
+            "description": "JSONata expression over the surface data model ($model, $surfaces, $item, $view)."
+          },
+          "dataset": {
+            "type": "string"
+          }
+        },
+        "anyOf": [
+          {
+            "required": [
+              "map"
+            ]
+          },
+          {
+            "required": [
+              "extract",
+              "from"
+            ]
+          }
+        ]
+      }
+    },
+    "views": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/View"
+      }
+    },
+    "flow": {
+      "$ref": "#/$defs/Steps"
+    },
+    "provenance": {
+      "type": "object"
+    },
+    "control": {
+      "type": "object",
+      "required": [
+        "components"
+      ],
+      "additionalProperties": false,
+      "description": "User input as an A2UI surface: inputs write to the local data model (write contract); Button events with {path}-bound context become machine events.",
+      "properties": {
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "component"
+            ]
+          }
+        },
+        "dataModel": {
+          "type": "object"
+        }
+      }
+    },
+    "machine": {
+      "type": "object",
+      "required": [
+        "id",
+        "initial",
+        "states"
+      ],
+      "description": "XState v5 machine config (JSON). Actions/guards {type, params}; invoke {src, input}; implementations from the a2flow runtime library.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "initial": {
+          "type": "string"
+        },
+        "context": {
+          "type": "object"
+        },
+        "states": {
+          "type": "object",
+          "minProperties": 1
+        }
+      }
+    },
+    "policies": {
+      "type": "object",
+      "description": "Timeouts, retries/backoff, rate limit, overlay dismissal, block detection, HTTP status handling.",
+      "properties": {
+        "timeouts": {
+          "type": "object"
+        },
+        "retry": {
+          "type": "object"
+        },
+        "rateLimit": {
+          "type": "object"
+        },
+        "dismiss": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "sel",
+              "intent"
+            ]
+          }
+        },
+        "blocked": {
+          "type": "object",
+          "properties": {
+            "selectors": {
+              "type": "array"
+            },
+            "textPatterns": {
+              "type": "array"
+            },
+            "action": {
+              "enum": [
+                "pause",
+                "fail"
+              ]
+            }
+          }
+        },
+        "http": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "View": {
+      "type": "object",
+      "required": [
+        "match",
+        "components",
+        "model",
+        "anchors",
+        "actions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "match": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "format": "regex"
+            },
+            "selector": {
+              "type": "string"
+            },
+            "absent": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string",
+              "format": "regex"
+            }
+          }
+        },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "component"
+            ]
+          },
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "root"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        "model": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^/"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/Extractor"
+          }
+        },
+        "anchors": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "model"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "pattern": "^/"
+                  },
+                  "sel_within": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "sel"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "sel": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "actions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "op",
+              "intent"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "op": {
+                "enum": [
+                  "click",
+                  "scroll",
+                  "type",
+                  "press",
+                  "back",
+                  "navigate"
+                ]
+              },
+              "anchor": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              },
+              "by": {
+                "oneOf": [
+                  {
+                    "enum": [
+                      "page",
+                      "end"
+                    ]
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "url": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "reveal": {
+                "type": "string"
+              },
+              "revealMax": {
+                "type": "integer"
+              },
+              "intent": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "settle": {
+          "type": "object",
+          "properties": {
+            "quietMs": {
+              "type": "integer"
+            },
+            "timeoutMs": {
+              "type": "integer"
+            }
+          }
+        },
+        "outcome": {
+          "type": "boolean"
+        },
+        "fingerprint": {
+          "type": "object",
+          "required": [
+            "simhash",
+            "shape"
+          ],
+          "properties": {
+            "simhash": {
+              "type": "string"
+            },
+            "shape": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "minSimilarity": {
+              "type": "number"
+            },
+            "ax": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Accessibility-tree role structure tokens"
+            }
+          }
+        },
+        "interrupt": {
+          "type": "boolean",
+          "description": "Overlay that interrupts the flow (modal, banner, captcha); projected as its own surface; raises INTERRUPT."
+        }
+      }
+    },
+    "Extractor": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "net"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "net": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "url",
+                    "select"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "format": "regex"
+                    },
+                    "select": {
+                      "type": "string",
+                      "description": "JSONata over the parsed JSON response body"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "enum": [
+                        "append",
+                        "replace"
+                      ]
+                    },
+                    "method": {
+                      "type": "string"
+                    },
+                    "when": {
+                      "type": "string",
+                      "description": "JSONata predicate over the parsed body"
+                    }
+                  }
+                },
+                {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "url",
+                      "select"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "format": "regex"
+                      },
+                      "select": {
+                        "type": "string",
+                        "description": "JSONata over the parsed JSON response body"
+                      },
+                      "key": {
+                        "type": "string"
+                      },
+                      "mode": {
+                        "enum": [
+                          "append",
+                          "replace"
+                        ]
+                      },
+                      "method": {
+                        "type": "string"
+                      },
+                      "when": {
+                        "type": "string",
+                        "description": "JSONata predicate over the parsed body"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "each",
+            "fields"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "each": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer"
+            },
+            "fields": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/Extractor"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "fields"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "fields": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/Extractor"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "each"
+                ]
+              },
+              {
+                "required": [
+                  "fields"
+                ]
+              }
+            ]
+          },
+          "properties": {
+            "sel": {
+              "type": "string"
+            },
+            "get": {
+              "type": "string",
+              "pattern": "^(text|src|bg|html|canvas|location|attr:.+|prop:.+|json:.*)$"
+            },
+            "re": {
+              "type": "string"
+            },
+            "as": {
+              "enum": [
+                "string",
+                "int",
+                "float",
+                "count",
+                "bool",
+                "url",
+                "seconds"
+              ]
+            },
+            "all": {
+              "type": "boolean"
+            },
+            "default": {}
+          }
+        }
+      ]
+    },
+    "Operand": {
+      "oneOf": [
+        {
+          "type": [
+            "number",
+            "string",
+            "boolean"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "count"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "Cond": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "gte": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/Operand"
+            },
+            {
+              "$ref": "#/$defs/Operand"
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "lt": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/Operand"
+            },
+            {
+              "$ref": "#/$defs/Operand"
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "eq": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/Operand"
+            },
+            {
+              "$ref": "#/$defs/Operand"
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "not": {
+          "$ref": "#/$defs/Cond"
+        },
+        "and": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Cond"
+          }
+        },
+        "or": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Cond"
+          }
+        },
+        "exists": {
+          "type": "string"
+        },
+        "stalled": {
+          "type": "integer"
+        },
+        "view": {
+          "type": "string"
+        },
+        "empty": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Step"
+      }
+    },
+    "Step": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "navigate"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "navigate": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "await"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "await": {
+              "type": "object",
+              "required": [
+                "view"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "view": {
+                  "type": "string"
+                },
+                "until": {
+                  "$ref": "#/$defs/Cond"
+                },
+                "timeoutMs": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "action",
+            "on"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "on": {
+              "type": "string"
+            },
+            "item": {
+              "oneOf": [
+                {
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "input",
+            "value"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "input": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "emit"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "emit": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "repeat"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "repeat": {
+              "type": "object",
+              "required": [
+                "until",
+                "do"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "until": {
+                  "$ref": "#/$defs/Cond"
+                },
+                "max": {
+                  "type": "integer"
+                },
+                "do": {
+                  "$ref": "#/$defs/Steps"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "forEach"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "forEach": {
+              "type": "object",
+              "required": [
+                "in",
+                "as",
+                "do"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "in": {
+                  "type": "string"
+                },
+                "as": {
+                  "type": "string"
+                },
+                "limit": {
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                },
+                "do": {
+                  "$ref": "#/$defs/Steps"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "set"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "set": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "log"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "log": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "anyOf": [
+    {
+      "required": [
+        "flow"
+      ]
+    },
+    {
+      "required": [
+        "machine",
+        "control"
+      ]
+    }
+  ]
+}
