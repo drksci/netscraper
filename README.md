@@ -155,4 +155,4 @@ reload.
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE). The vendored A2UI v0.9 schemas in `vendor/a2ui/` are Google's, under Apache 2.0.
+MIT © 2026 Blake Carter, d/rksci. See [LICENSE](LICENSE). The vendored A2UI v0.9 schemas in `vendor/a2ui/` are Google's, under Apache 2.0.
